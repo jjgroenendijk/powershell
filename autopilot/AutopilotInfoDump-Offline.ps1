@@ -5,8 +5,18 @@
 
 $scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 
-Install-PackageProvider -Name "NuGet" -Force
+$packageProvider = Get-PackageProvider NuGet -ErrorAction Ignore
+if (!($packageProvider))
+{
+    Install-PackageProvider -Name "NuGet" -Force
+}
+
+$scriptCheck = Get-InstalledScript -Name Get-WindowsAutopilotInfo
+if (!($scriptCheck))
+{
 Install-Script -Name Get-WindowsAutopilotInfo -Force
+}
+
 Get-WindowsAutopilotInfo -OutputFile "$scriptPath\AutopilotDevices.csv" -Append
 
 OK-Continue
