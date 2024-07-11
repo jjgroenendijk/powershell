@@ -190,7 +190,11 @@ Function New-RegistryDetection {
         New-Item -Path $SoftwareRegistryPath -Force
     }
 
+    # Write version to registry
     Set-ItemProperty -Path $SoftwareRegistryPath -Name "Version" -Value "$Version"
+    
+    # Write installation date to registry
+    Set-ItemProperty -Path $SoftwareRegistryPath -Name "InstallDate " -Value (Get-Date -Format FileDateUniversal)
 }
 
 Function Remove-RegistryDetection {
