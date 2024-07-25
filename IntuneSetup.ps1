@@ -17,7 +17,7 @@ $SoftwareRegistryDetection = "HKLM:\SOFTWARE\$CompanyName\$SoftwareName"        
 # Get details of this script
 $sourceFilename = $myInvocation.InvocationName                                  # Filename of this script
 $sourceContent = get-content -Path $sourceFilename                              # Content of this script
-$destinationDirectory = "${env:ProgramData}\$Companyname\Scripts"                   # Path to copy this script to
+$destinationDirectory = "${env:ProgramData}\$Companyname\Scripts"               # Path to copy this script to
 $destinationFilename = $sourceFilename | Split-Path -Leaf                       # Filename of this script
 $destinationPath = "$destinationDirectory\$destinationFilename"                 # Path to copy this script to
 
@@ -208,16 +208,17 @@ Function Remove-RegistryDetection {
 
 }
 
+# Start Logging
+Start-Log -SoftwareName $SoftwareName -SoftwareVersion $SoftwareVersion -SoftwareLogDirectory $SoftwareLogDirectory
+
+# Try running this script in 64-bit mode
+runAs64Bit
+
 switch ($action) {
 
     "install" {
-
-        Start-Log -SoftwareName $SoftwareName -SoftwareVersion $SoftwareVersion -SoftwareLogDirectory $SoftwareLogDirectory
-
+    
         Write-Output "Installing $SoftwareName $SoftwareVersion"
-
-        # Try running this script in 64-bit mode
-        runAs64Bit
 
         # Copy this script to the script directory
         copyThisScript
@@ -241,16 +242,13 @@ switch ($action) {
         Get-ScheduledTask -TaskName "$SoftwareName $SoftwareVersion" | Start-ScheduledTask
 
         # OPTIONAL: Uncomment the following line to uninstall the software after executing this script
-        Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File ""$destinationPath"" -action uninstall"
+        #Start-Process -FilePath "powershell.exe" -ArgumentList "-ExecutionPolicy Bypass -File ""$destinationPath"" -action uninstall"
 
     }
 
     "uninstall" {
+
         Write-Output "Uninstalling $SoftwareName $SoftwareVersion"
-
-        runAs64Bit
-
-        Start-Log -SoftwareName $SoftwareName -SoftwareVersion $SoftwareVersion -SoftwareLogDirectory $SoftwareLogDirectory
 
         # Remove the scheduled task
         Remove-CustomScheduledTask -SoftwareName $SoftwareName -SoftwareVersion $SoftwareVersion
@@ -261,9 +259,6 @@ switch ($action) {
         # Remove the script from the script directory
         Remove-Item -Path $destinationPath -Force -ErrorAction SilentlyContinue
 
-        # Stop logging
-        Stop-Log -SoftwareLogDirectory $SoftwareLogDirectory
-
     }
 
     default {
@@ -271,3 +266,5 @@ switch ($action) {
     }
 
 }
+        # Stop logging
+        Stop-Log -SoftwareLogDirectory $SoftwareLogDirectory
