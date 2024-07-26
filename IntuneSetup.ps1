@@ -11,7 +11,9 @@ $PSDefaultParameterValues['*:Verbose'] = $true                                  
 $CompanyName = "Company"                                                        # Company name
 $SoftwareName = "Software Name"                                                 # Software name
 $SoftwareVersion = "1.0.0"                                                      # Software version
-$SoftwareLogDirectory = "${env:ProgramData}\$CompanyName\LOG\$SoftwareName"     # Path to log directory
+$currentTime = "$(Get-Date -format FileDateTimeUniversal)"                      # Current time
+$LogDirectory = "$env:programdata\$CompanyName\LOG"                             # Logging Directory
+$LogPath = "$LogDirectory\$SoftwareName $action $currentTime.log"               # Path to log file
 $SoftwareRegistryDetection = "HKLM:\SOFTWARE\$CompanyName\$SoftwareName"        # Registry detection path
 
 # Get details of this script
@@ -21,18 +23,6 @@ $destinationDirectory = "${env:ProgramData}\$Companyname\Scripts"               
 $destinationFilename = $sourceFilename | Split-Path -Leaf                       # Filename of this script
 $destinationPath = "$destinationDirectory\$destinationFilename"                 # Path to copy this script to
 
-function runAs64Bit {
-    If ($ENV:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
-        Try {
-            &"$ENV:WINDIR\SysNative\WindowsPowershell\v1.0\PowerShell.exe" -File $PSCOMMANDPATH -ArgumentList "@PSBoundParameters"
-        }
-        Catch {
-            Throw "Failed to start $PSCOMMANDPATH"
-        }
-        Exit
-    }
-}
-
 function initPSModule {
     param(
         [Parameter(Mandatory = $true)]
@@ -41,15 +31,13 @@ function initPSModule {
 
     Write-Output "Initializing PS Module: $PSModule"
 
-
     # Check if Nuget package provider is installed
     $nugetCheck = (!(Get-PackageProvider -listavailable -Name Nuget -ErrorAction SilentlyContinue))
     if ($nugetCheck) {
         Write-Output "installing nuget package provider"
         Install-PackageProvider -Name 'Nuget' -scope AllUsers -Force
     }
-            
-        
+
     # Check if PSGallery is trusted
     $repositoryTrustCheck = (Get-PSRepository -Name "PSGallery").InstallationPolicy -ne "Trusted"
     if ($repositoryTrustCheck) {
@@ -59,7 +47,7 @@ function initPSModule {
     else {
         Write-Output "PSGallery already trusted!"
     }
-        
+
     # Check if the module is installed
     $PSModuleInstallationStatus = Get-InstalledModule -Name $PSModule -ErrorAction SilentlyContinue
     if ($null -eq $PSModuleInstallationStatus) {
@@ -69,7 +57,7 @@ function initPSModule {
     else {
         Write-Output "PS Module $PSModule already installed!"
     }
-        
+
     # Check if the module is imported
     $PSModuleImportStatus = Get-Module -Name $PSModule -ErrorAction SilentlyContinue
     if ($null -eq $PSModuleImportStatus) {
@@ -93,39 +81,22 @@ function copyThisScript {
 
 function Start-Log {
 
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]$SoftwareName,
-        [Parameter(Mandatory = $true)]
-        [string]$SoftwareVersion,
-        [Parameter(Mandatory = $true)]
-        [string]$SoftwareLogDirectory
-    )
+    if (-not(test-path $LogDirectory)) { New-Item -Path $LogDirectory -ItemType Directory -Force }
+    
+    Start-Transcript -Path $LogPath -IncludeInvocationHeader -Append
 
-    if (-not(test-path -Path $SoftwareLogDirectory)) {
-        New-Item -Path $SoftwareLogDirectory -ItemType Directory -Force
-    }
-    Start-Transcript -Path "$SoftwareLogDirectory\Setup $SoftwareName $SoftwareVersion ($(get-date -Format FileDateUniversal)).log" -IncludeInvocationHeader -Append
-    Write-Output "Logging started"
 }
 
 function Stop-Log {
 
-    param (
-        [string]$SoftwareLogDirectory
-    )
-
-    $allLogs = Get-ChildItem -Path $SoftwareLogDirectory -Include "*.log" -Recurse
+    $allLogs = Get-ChildItem -Path $LogDirectory -Include "*.log" -Recurse
     $oldLogs = $allLogs | Where-Object { ($_.LastWriteTime -lt (Get-Date).AddDays(-180)) }
     
-    foreach ($oldLog in $oldLogs) {
-        Write-Output "deleting: $oldLog"
-        Remove-Item $oldLog
-    }
+    foreach ($oldLog in $oldLogs) { Remove-Item $oldLog }
     
     Stop-Transcript
-}
 
+}
 
 function new-CustomScheduledTask {
     param (
@@ -179,40 +150,38 @@ Function Remove-CustomScheduledTask {
 
 Function New-RegistryDetection {
 
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]$SoftwareRegistryPath,
-        [Parameter(Mandatory = $true)]
-        [string]$Version
-    )
-
-    if (-not(Test-Path $SoftwareRegistryPath)) {
-        New-Item -Path $SoftwareRegistryPath -Force
-    }
+    if (-not(Test-Path $SoftwareRegistryDetection)) { New-Item -Path $SoftwareRegistryDetection -Force }
 
     # Write version to registry
-    Set-ItemProperty -Path $SoftwareRegistryPath -Name "Version" -Value "$Version"
+    Set-ItemProperty -Path $SoftwareRegistryDetection -Name "Version" -Value "$Version"
     
     # Write installation date to registry
-    Set-ItemProperty -Path $SoftwareRegistryPath -Name "InstallDate " -Value (Get-Date -Format FileDateUniversal)
+    Set-ItemProperty -Path $SoftwareRegistryDetection -Name "InstallDate " -Value $(Get-Date -Format FileDateUniversal)
+
 }
 
 Function Remove-RegistryDetection {
 
-    param (
-        [Parameter(Mandatory = $true)]
-        [string]$SoftwareRegistryPath
-    )
-
-    Remove-Item -Path "$SoftwareRegistryPath" -Force -Recurse
+    Remove-Item -Path $SoftwareRegistryDetection -Force -Recurse
 
 }
 
-# Start Logging
-Start-Log -SoftwareName $SoftwareName -SoftwareVersion $SoftwareVersion -SoftwareLogDirectory $SoftwareLogDirectory
+# Run this script in 64-bit mode
+Write-Output "Running in mode: $env:PROCESSOR_ARCHITECTURE"
 
-# Try running this script in 64-bit mode
-runAs64Bit
+If ($ENV:PROCESSOR_ARCHITEW6432 -eq "AMD64") {
+    Try {
+        Write-Output "Restarting to 64-bit mode!"
+        & "$ENV:WINDIR\SysNative\WindowsPowershell\v1.0\PowerShell.exe" -File $PSCOMMANDPATH @psboundparameters
+    }
+    Catch {
+        Throw "Failed to start $PSCOMMANDPATH"
+    }
+    Exit
+}
+
+# Start Logging
+Start-Log
 
 switch ($action) {
 
@@ -227,13 +196,11 @@ switch ($action) {
         new-CustomScheduledTask -SoftwareName $SoftwareName -SoftwareVersion $SoftwareVersion -destinationPath $destinationPath
 
         # Create registry detection
-        New-RegistryDetection -SoftwareRegistryPath $SoftwareRegistryDetection -Version $SoftwareVersion
+        New-RegistryDetection
 
         # Run the scheduled task immediately
         Get-ScheduledTask -TaskName "$SoftwareName $SoftwareVersion" | Start-ScheduledTask
 
-        # Stop logging
-        Stop-Log -SoftwareLogDirectory $SoftwareLogDirectory
     }
 
     "run" {
@@ -254,7 +221,7 @@ switch ($action) {
         Remove-CustomScheduledTask -SoftwareName $SoftwareName -SoftwareVersion $SoftwareVersion
 
         # Remove registry detection
-        Remove-RegistryDetection -SoftwareRegistryPath $SoftwareRegistryDetection
+        Remove-RegistryDetection
 
         # Remove the script from the script directory
         Remove-Item -Path $destinationPath -Force -ErrorAction SilentlyContinue
@@ -265,6 +232,8 @@ switch ($action) {
         Write-Output "Invalid action"
     }
 
+
 }
-        # Stop logging
-        Stop-Log -SoftwareLogDirectory $SoftwareLogDirectory
+
+# Stop logging
+Stop-Log
