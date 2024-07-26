@@ -1,0 +1,22 @@
+<Configuration>
+<vGPU>Enable</vGPU>
+
+<MappedFolders>
+
+  <MappedFolder>
+    <HostFolder>C:\pkg</HostFolder>
+    <SandboxFolder>C:\pkg</SandboxFolder>
+  </MappedFolder>
+
+  <MappedFolder>
+    <HostFolder>C:\sandbox</HostFolder>
+    <SandboxFolder>C:\sandbox</SandboxFolder>
+  </MappedFolder>
+
+</MappedFolders>
+
+<LogonCommand>
+  <Command>C:\sandbox\initSandbox.cmd</Command>
+</LogonCommand>
+
+</Configuration>
